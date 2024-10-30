@@ -12,11 +12,20 @@ import com.audiobookshelf.app.device.DeviceManager
 import java.util.*
 import kotlin.concurrent.schedule
 
+import com.audiobookshelf.app.data.DeviceSettings
 class MediaSessionCallback(var playerNotificationService:PlayerNotificationService) : MediaSessionCompat.Callback() {
   var tag = "MediaSessionCallback"
+  private val deviceSettings
+    get() = DeviceManager.deviceData.deviceSettings ?: DeviceSettings.default()
 
   private var mediaButtonClickCount: Int = 0
   private var mediaButtonClickTimeout: Long = 1000  //ms
+
+  private var clickTimer: Timer = Timer()
+  private var clickTimerId: Long = System.currentTimeMillis()
+  private var clickCount: Int = 0
+  private var clickPressed: Boolean = false
+  private var clickTimerScheduled: Boolean = false
 
   override fun onPrepare() {
     Log.d(tag, "ON PREPARE MEDIA SESSION COMPAT")
@@ -157,6 +166,12 @@ class MediaSessionCallback(var playerNotificationService:PlayerNotificationServi
         @Suppress("DEPRECATION")
         intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT)
       }
+      if(deviceSettings.enableExtendedHeadsetControls) {
+        Log.d(tag, "extended headset control: enabled")
+        return debounceKeyEvent(keyEvent)
+      } else {
+        Log.d(tag, "extended headset control: disabled")
+      }
 
       Log.d(tag, "handleCallMediaButton keyEvent = $keyEvent | action ${keyEvent?.action}")
 
@@ -258,6 +273,82 @@ class MediaSessionCallback(var playerNotificationService:PlayerNotificationServi
   }
 
 
+
+  private fun debounceKeyEvent(keyEvent: KeyEvent?): Boolean {
+    // how does this work:
+    // - every keyDown and keyUp triggers a scheduled handler
+    // - another keyDown or keyUp cancels the scheduled handler and re-triggers it with new values
+    // - the handler takes clickCount:int and clickPressed:bool (if held down)
+    // - keyCodes increase the number of clicks (PlayPause+=1, Next+=2, Prev+=3)
+    // - depending on the number of clicks, the playerNotificationService handles the configured action
+    // problems:
+    // - the logs show pretty accurate click / hold detection, but it does not really translate well in the player
+    // - since the trigger is scheduled, it does run in a different thread
+    // - this leads to strange behaviour - probably easy to fix, but I'm no kotlin native (Coroutines)
+    // - probably after some actions the thread of the player is no longer accessible...
+    if (keyEvent?.action == KeyEvent.ACTION_UP) {
+      clickPressed = false
+      // Log.d(tag, "=== KeyEvent.ACTION_UP")
+
+    } else if (keyEvent?.action == KeyEvent.ACTION_DOWN) {
+      // Log.d(tag, "=== KeyEvent.ACTION_DOWN")
+
+      if(clickPressed) {
+        return false
+      }
+      clickPressed = true
+
+      when (keyEvent.keyCode) {
+        KeyEvent.KEYCODE_HEADSETHOOK,
+        KeyEvent.KEYCODE_MEDIA_PLAY,
+        KeyEvent.KEYCODE_MEDIA_PAUSE,
+        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+          clickCount++
+          Log.d(tag, "=== handleCallMediaButton: Headset Hook/Play/ Pause, clickCount=$clickCount")
+        }
+
+        KeyEvent.KEYCODE_MEDIA_NEXT -> {
+          clickCount += 2
+          Log.d(tag, "=== handleCallMediaButton: Media Next, clickCount=$clickCount")
+        }
+
+        KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
+          clickCount += 3
+          Log.d(tag, "=== handleCallMediaButton: Media Previous, clickCount=$clickCount")
+        }
+
+        KeyEvent.KEYCODE_MEDIA_STOP -> {
+          Log.d(tag, "=== handleCallMediaButton: Media Stop, clickCount=$clickCount")
+          playerNotificationService.closePlayback()
+          clickTimer.cancel()
+          return true
+        } else -> {
+          Log.d(tag, "=== KeyCode:${keyEvent.keyCode}, clickCount=$clickCount")
+          return false
+        }
+      }
+    }
+
+    if(clickTimerScheduled) {
+      Log.d(tag, "=== clickTimer cancelled ($clickTimerId): clicks=$clickCount, hold=$clickPressed =========")
+      clickTimer.cancel()
+      clickTimer = Timer()
+    }
+
+    clickTimer.schedule(650) {
+      Log.d(tag, "=== clickTimer executed ($clickTimerId): clicks=$clickCount, hold=$clickPressed =========")
+    Handler(Looper.getMainLooper()).post {
+      playerNotificationService.handleClicks(clickCount, clickPressed)
+    }
+      clickCount = 0
+      clickTimerScheduled = false
+    }
+    clickTimerScheduled = true
+    Log.d(tag, "=== clickTimer scheduled ($clickTimerId): clicks=$clickCount, hold=$clickPressed =========")
+    return true
+  }
+
+  @Suppress("DEPRECATION")
   private val mediaBtnHandler : Handler = @SuppressLint("HandlerLeak")
   object : Handler(){
     override fun handleMessage(msg: Message) {

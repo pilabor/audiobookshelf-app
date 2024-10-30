@@ -150,6 +150,14 @@
       </div>
     </div>
 
+    <p class="uppercase text-xs font-semibold text-fg-muted mb-2 mt-10">{{ $strings.HeaderHeadsetSettings }}</p>
+    <div class="flex items-center py-3">
+      <div class="w-10 flex justify-center" @click="toggleEnableExtendedHeadsetControls">
+        <ui-toggle-switch v-model="enableExtendedHeadsetControls" @input="saveSettings" />
+      </div>
+      <p class="pl-4">{{ $strings.LabelUseExtendedHeadsetControls }}</p>
+    </div>
+
     <div v-show="loading" class="w-full h-full absolute top-0 left-0 flex items-center justify-center z-10">
       <ui-loading-indicator />
     </div>
@@ -193,7 +201,8 @@ export default {
         autoSleepTimerAutoRewindTime: 300000, // 5 minutes
         languageCode: 'en-us',
         downloadUsingCellular: 'ALWAYS',
-        streamingUsingCellular: 'ALWAYS'
+        streamingUsingCellular: 'ALWAYS',
+        enableExtendedHeadsetControls: false
       },
       theme: 'dark',
       lockCurrentOrientation: false,
@@ -380,7 +389,15 @@ export default {
       else if (this.moreMenuSetting === 'downloadUsingCellular') return this.downloadUsingCellularItems
       else if (this.moreMenuSetting === 'streamingUsingCellular') return this.streamingUsingCellularItems
       return []
-    }
+    },
+    enableExtendedHeadsetControls: {
+      get() {
+        return this.settings.enableExtendedHeadsetControls
+      },
+      set(val) {
+        this.settings.enableExtendedHeadsetControls = val
+      }
+    },
   },
   methods: {
     sleepTimerLengthModalSelection(value) {
@@ -537,6 +554,10 @@ export default {
       this.settings.jumpBackwardsTime = this.jumpBackwardsItems[next].value
       this.saveSettings()
     },
+    toggleEnableExtendedHeadsetControls() {
+      this.settings.enableExtendedHeadsetControls = !this.settings.enableExtendedHeadsetControls
+      this.saveSettings()
+    },
     async saveSettings() {
       await this.$hapticsImpact()
       const updatedDeviceData = await this.$db.updateDeviceSettings({ ...this.settings })
@@ -555,6 +576,7 @@ export default {
       this.settings.jumpForwardTime = deviceSettings.jumpForwardTime || 10
       this.settings.jumpBackwardsTime = deviceSettings.jumpBackwardsTime || 10
       this.settings.enableMp3IndexSeeking = !!deviceSettings.enableMp3IndexSeeking
+      this.settings.enableExtendedHeadsetControls = !!deviceSettings.enableExtendedHeadsetControls
 
       this.settings.lockOrientation = deviceSettings.lockOrientation || 'NONE'
       this.lockCurrentOrientation = this.settings.lockOrientation !== 'NONE'

@@ -85,6 +85,10 @@ export const getters = {
   getCanStreamingUsingCellular: state => {
     if (!state.deviceData?.deviceSettings?.streamingUsingCellular) return 'ALWAYS'
     return state.deviceData.deviceSettings.streamingUsingCellular || 'ALWAYS'
+  },
+  getExtendedHeadsetControlsEnabled: state => {
+    if (!state.deviceData?.deviceSettings) return false
+    return state.deviceData.deviceSettings.enableExtendedHeadsetControls
   }
 }
 

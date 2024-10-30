@@ -50,12 +50,41 @@ import com.google.android.exoplayer2.upstream.*
 import java.util.*
 import kotlin.concurrent.schedule
 
+import com.google.android.exoplayer2.upstream.DefaultDataSource
+import com.google.android.exoplayer2.upstream.DefaultHttpDataSource
+import com.google.android.exoplayer2.C
+import com.google.android.exoplayer2.DefaultLoadControl
+import com.google.android.exoplayer2.ExoPlayer
+import com.google.android.exoplayer2.LoadControl
+import com.google.android.exoplayer2.Player
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.Timer
+import java.util.TimerTask
+
+
+import com.audiobookshelf.app.data.DeviceSettings
+import com.audiobookshelf.app.data.LibraryItem
+import com.audiobookshelf.app.data.LocalMediaProgress
+import com.audiobookshelf.app.data.MediaItemHistory
+import com.audiobookshelf.app.data.MediaProgressWrapper
+import com.audiobookshelf.app.data.PlayItemRequestPayload
+import com.audiobookshelf.app.data.PlaybackMetadata
+import com.audiobookshelf.app.data.PlaybackSession
+import com.audiobookshelf.app.data.PlayerState
+import com.audiobookshelf.app.data.Podcast
 
 const val SLEEP_TIMER_WAKE_UP_EXPIRATION = 120000L // 2m
 const val PLAYER_CAST = "cast-player"
 const val PLAYER_EXO = "exo-player"
 
-class PlayerNotificationService : MediaBrowserServiceCompat()  {
+class PlayerNotificationService : CoroutineScope, MediaBrowserServiceCompat() {
+  override val coroutineContext: CoroutineContext
+    get() = Dispatchers.Main + Job()
 
   companion object {
     var isStarted = false
@@ -885,7 +914,133 @@ class PlayerNotificationService : MediaBrowserServiceCompat()  {
     }
   }
 
-  fun closePlayback(calledOnError:Boolean? = false) {
+  private var lastStatePlaying: Boolean = false
+
+  private var seekPlayBufferTime: Long = 450
+  /*
+  fun fastForward() {
+    val lock = Object()
+    launch {
+      withContext(coroutineContext) {
+        while (currentPlayer.currentPosition < currentPlayer.duration) {
+          seekPlayer(5L * 1000 - seekPlayBufferTime)
+          play()
+          lock.wait(seekPlayBufferTime)
+        }
+      }
+    }
+  }
+
+   */
+  /*
+    fun rewind() {
+      val locker = ReentrantLock()
+      launch {
+        withContext(coroutineContext) {
+            while (currentPlayer.currentPosition > 0) {
+              seekPlayer(-5L * 1000 + seekPlayBufferTime)
+              play()
+            }
+        }
+      }
+    }
+  */
+
+  private var stopSeeking: Boolean = false
+
+  fun handleClicks(clicks: Int, clickPressed: Boolean) {
+    stopSeeking = true
+    launch {
+      // the handlers should be configurlateinitable, defaults:
+      // hold -> jumpBackward
+      // click -> play / pause
+      // click, hold -> fast forward
+      // click, click -> next (chapter or track)
+      // click, click, hold -> rewind
+      // click, click, click -> previous (chapter or track)
+
+      withContext(coroutineContext) {
+        Log.d(tag, "=== handleClicks: count=$clicks,hold=$clickPressed")
+
+        if (clickPressed) {
+          lastStatePlaying = currentPlayer.isPlaying
+          when (clicks) {
+            1 -> {
+              jumpBackward()
+            }
+            2 -> {
+              Log.d(tag, "=== fastForward init, stopSeeking=$stopSeeking")
+
+              stopSeeking = false
+              val mainHandler = Handler(Looper.getMainLooper())
+              mainHandler.post(object : Runnable {
+                override fun run() {
+                  Log.d(tag, "=== fastForward run, stopSeeking=$stopSeeking")
+                  seekForward(10000 - seekPlayBufferTime)
+                  play()
+                  if(!stopSeeking) {
+                    Log.d(tag, "=== fastForward recursion")
+                    mainHandler.postDelayed(this, seekPlayBufferTime)
+                  }
+                }
+              })
+            }
+
+            3 -> {
+              stopSeeking = false
+              val mainHandler = Handler(Looper.getMainLooper())
+              mainHandler.post(object : Runnable {
+                override fun run() {
+                    seekBackward(10000 + seekPlayBufferTime)
+                    play()
+                    if(!stopSeeking) {
+                      mainHandler.postDelayed(this, seekPlayBufferTime)
+                    }
+                  }
+              })
+            }
+          }
+        } else {
+          when (clicks) {
+            0 -> {
+              // switch from fastForward / rewind back to last playing state
+              if (lastStatePlaying) {
+                play()
+              } else {
+                pause()
+              }
+            }
+
+            1 -> {
+              playPause()
+              /*
+              if (currentPlayer.isPlaying) {
+                pause()
+              } else {
+                play()
+              }
+
+               */
+            }
+
+            2 -> {
+              // todo: implement "next chapter"
+              // skipToNext()
+              seekForward(300000)
+            }
+
+            3 -> {
+              // todo: implement "previous chapter"
+              // skipToPrevious()
+              seekBackward(300000)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  fun closePlayback(calledOnError: Boolean? = false) {
     Log.d(tag, "closePlayback")
     val isLocal = mediaProgressSyncer.currentIsLocal
     val currentSessionId = mediaProgressSyncer.currentSessionId
