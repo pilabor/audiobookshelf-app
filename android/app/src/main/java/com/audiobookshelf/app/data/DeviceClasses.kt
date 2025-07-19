@@ -7,6 +7,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonSubTypes
 import com.fasterxml.jackson.annotation.JsonTypeInfo
+import kotlin.Boolean
 
 enum class LockOrientationSetting {
   NONE, PORTRAIT, LANDSCAPE
@@ -143,8 +144,10 @@ data class DeviceSettings(
   var downloadUsingCellular: DownloadUsingCellularSetting,
   var streamingUsingCellular: StreamingUsingCellularSetting,
   var androidAutoBrowseLimitForGrouping: Int,
-  var androidAutoBrowseSeriesSequenceOrder: AndroidAutoBrowseSeriesSequenceOrderSetting
-) {
+  var androidAutoBrowseSeriesSequenceOrder: AndroidAutoBrowseSeriesSequenceOrderSetting,
+  var enableExtendedHeadsetControls: Boolean,
+
+  ) {
   companion object {
     // Static method to get default device settings
     fun default():DeviceSettings {
@@ -172,7 +175,8 @@ data class DeviceSettings(
         downloadUsingCellular = DownloadUsingCellularSetting.ALWAYS,
         streamingUsingCellular = StreamingUsingCellularSetting.ALWAYS,
         androidAutoBrowseLimitForGrouping = 100,
-        androidAutoBrowseSeriesSequenceOrder = AndroidAutoBrowseSeriesSequenceOrderSetting.ASC
+        androidAutoBrowseSeriesSequenceOrder = AndroidAutoBrowseSeriesSequenceOrderSetting.ASC,
+        enableExtendedHeadsetControls = false,
       )
     }
   }

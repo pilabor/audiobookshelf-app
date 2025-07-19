@@ -67,6 +67,13 @@
       </div>
       <p class="pl-4">{{ $strings.LabelAllowSeekingOnMediaControls }}</p>
     </div>
+    <div v-if="!isiOS" class="flex items-center py-3">
+      <div class="w-10 flex justify-center" @click="toggleEnableExtendedHeadsetControls">
+        <ui-toggle-switch v-model="settings.enableExtendedHeadsetControls" @input="saveSettings" />
+      </div>
+      <p class="pl-4">{{ $strings.LabelEnableExtendedHeadsetControls }}</p>
+      <span class="material-symbols text-xl ml-2" @click.stop="showInfo('enableExtendedHeadsetControls')">info</span>
+    </div>
 
     <!-- Sleep timer settings -->
     <template v-if="!isiOS">
@@ -201,6 +208,7 @@ export default {
         disableAutoRewind: false,
         enableAltView: true,
         allowSeekingOnMediaControls: false,
+        enableExtendedHeadsetControls: false,
         jumpForwardTime: 10,
         jumpBackwardsTime: 10,
         enableMp3IndexSeeking: false,
@@ -253,6 +261,10 @@ export default {
         enableMp3IndexSeeking: {
           name: this.$strings.LabelEnableMp3IndexSeeking,
           message: this.$strings.LabelEnableMp3IndexSeekingHelp
+        },
+        toggleEnableExtendedHeadsetControls: {
+          name: this.$strings.LabelEnableExtendedHeadsetControls,
+          message: this.$strings.LabelEnableExtendedHeadsetControlsHelp
         },
         androidAutoBrowseLimitForGrouping: {
           name: this.$strings.LabelAndroidAutoBrowseLimitForGrouping,
@@ -581,6 +593,11 @@ export default {
       this.settings.allowSeekingOnMediaControls = !this.settings.allowSeekingOnMediaControls
       this.saveSettings()
     },
+    toggleEnableExtendedHeadsetControls() {
+      this.settings.enableExtendedHeadsetControls = !this.settings.enableExtendedHeadsetControls
+      this.saveSettings()
+    },
+
     getCurrentOrientation() {
       const orientation = window.screen?.orientation || {}
       const type = orientation.type || ''
@@ -624,6 +641,7 @@ export default {
       this.settings.disableAutoRewind = !!deviceSettings.disableAutoRewind
       this.settings.enableAltView = !!deviceSettings.enableAltView
       this.settings.allowSeekingOnMediaControls = !!deviceSettings.allowSeekingOnMediaControls
+      this.settings.enableExtendedHeadsetControls = !!deviceSettings.enableExtendedHeadsetControls
       this.settings.jumpForwardTime = deviceSettings.jumpForwardTime || 10
       this.settings.jumpBackwardsTime = deviceSettings.jumpBackwardsTime || 10
       this.settings.enableMp3IndexSeeking = !!deviceSettings.enableMp3IndexSeeking

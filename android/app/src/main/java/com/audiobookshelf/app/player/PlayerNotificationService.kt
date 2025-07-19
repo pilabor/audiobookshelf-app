@@ -50,9 +50,17 @@ import com.google.android.exoplayer2.source.ProgressiveMediaSource
 import com.google.android.exoplayer2.source.hls.HlsMediaSource
 import com.google.android.exoplayer2.ui.PlayerNotificationManager
 import com.google.android.exoplayer2.upstream.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.*
 import kotlin.concurrent.schedule
 import kotlinx.coroutines.runBlocking
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 const val SLEEP_TIMER_WAKE_UP_EXPIRATION = 120000L // 2m
 const val PLAYER_CAST = "cast-player"
@@ -891,7 +899,57 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
     return false
   }
 
-  fun play() {
+  val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+  val seekPlayBufferTime = 850.milliseconds
+  val seekForwardTime = 10.seconds - seekPlayBufferTime;
+  val seekBackTime = 10.seconds + seekPlayBufferTime;
+  var seekJob : Job? = null
+
+  fun fastForward() {
+    cancelSeekJob()
+    seekJob = serviceScope.launch {
+      val isPlaying = currentPlayer.isPlaying
+      while(currentPlayer.currentPosition < currentPlayer.duration) {
+        seekForward(seekForwardTime.inWholeMilliseconds, false)
+        play(false)
+        delay(seekPlayBufferTime)
+      }
+      if(isPlaying) {
+        play()
+      } else {
+        pause()
+      }
+    }
+  }
+
+  fun rewind() {
+    cancelSeekJob()
+    seekJob = serviceScope.launch {
+      val isPlaying = currentPlayer.isPlaying
+      while(currentPlayer.currentPosition > 0) {
+        seekBackward(seekBackTime.inWholeMilliseconds, false)
+        play(false)
+        delay(seekPlayBufferTime)
+      }
+      if(isPlaying) {
+        play()
+      } else {
+        pause()
+      }
+    }
+  }
+
+  fun cancelSeekJob() {
+    if(seekJob?.isCancelled == true) {
+      return
+    }
+    seekJob?.cancel()
+  }
+
+  fun play(shouldCancelSeek:Boolean=true) {
+    if(shouldCancelSeek) {
+      cancelSeekJob()
+    }
     if (currentPlayer.isPlaying) {
       Log.d(tag, "Already playing")
       return
@@ -901,6 +959,7 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
   }
 
   fun pause() {
+    cancelSeekJob()
     currentPlayer.pause()
   }
 
@@ -937,30 +996,42 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
   }
 
   fun skipToPrevious() {
+    cancelSeekJob()
     currentPlayer.seekToPrevious()
   }
 
   fun skipToNext() {
+    cancelSeekJob()
     currentPlayer.seekToNext()
   }
 
   fun jumpForward() {
+    cancelSeekJob()
     seekForward(deviceSettings.jumpForwardTimeMs)
   }
 
   fun jumpBackward() {
+    cancelSeekJob()
     seekBackward(deviceSettings.jumpBackwardsTimeMs)
   }
 
-  fun seekForward(amount: Long) {
+  fun seekForward(amount: Long, shouldCancelSeek:Boolean=true) {
+    if(shouldCancelSeek) {
+      cancelSeekJob()
+    }
     seekPlayer(getCurrentTime() + amount)
   }
 
-  fun seekBackward(amount: Long) {
+  fun seekBackward(amount: Long, shouldCancelSeek:Boolean=true) {
+    if(shouldCancelSeek) {
+      cancelSeekJob()
+    }
+
     seekPlayer(getCurrentTime() - amount)
   }
 
   fun setPlaybackSpeed(speed: Float) {
+    cancelSeekJob()
     mediaManager.userSettingsPlaybackRate = speed
     currentPlayer.setPlaybackSpeed(speed)
 
@@ -969,6 +1040,8 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
   }
 
   fun closePlayback(calledOnError: Boolean? = false) {
+    cancelSeekJob()
+
     Log.d(tag, "closePlayback")
     val config = DeviceManager.serverConnectionConfig
 

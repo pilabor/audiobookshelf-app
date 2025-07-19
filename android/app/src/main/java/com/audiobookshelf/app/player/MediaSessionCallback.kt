@@ -6,16 +6,60 @@ import android.os.*
 import android.support.v4.media.session.MediaSessionCompat
 import android.util.Log
 import android.view.KeyEvent
+import com.audiobookshelf.app.data.DeviceSettings
 import com.audiobookshelf.app.data.LibraryItemWrapper
 import com.audiobookshelf.app.data.PodcastEpisode
+import com.audiobookshelf.app.device.DeviceManager
+import com.audiobookshelf.app.player.mediaButtonHandler.KeyDownKeyUpHandler
+import com.audiobookshelf.app.player.mediaButtonHandler.MediaButtonHandler
 import java.util.*
 import kotlin.concurrent.schedule
+import kotlin.time.Duration.Companion.minutes
 
 class MediaSessionCallback(var playerNotificationService:PlayerNotificationService) : MediaSessionCompat.Callback() {
   var tag = "MediaSessionCallback"
 
+  private val deviceSettings
+    get() = DeviceManager.deviceData.deviceSettings ?: DeviceSettings.default()
+  private val mediaButtonHandler: MediaButtonHandler = KeyDownKeyUpHandler(playerNotificationService.serviceScope)
+
   private var mediaButtonClickCount: Int = 0
   private var mediaButtonClickTimeout: Long = 1000  //ms
+
+  fun log(message: String) {
+    Log.d("KeyDownKeyUpHandler", message)
+  }
+
+
+  init {
+
+    mediaButtonHandler.addClickAction(1) {
+      log("1 click executed");
+      playerNotificationService.playPause()
+    }
+    mediaButtonHandler.addClickAction(2) {
+      log("2 clicks executed");
+      playerNotificationService.seekForward(5.minutes.inWholeMilliseconds)
+    };
+    mediaButtonHandler.addClickAction(3) {
+      log("3 clicks executed");
+      playerNotificationService.seekBackward(5.minutes.inWholeMilliseconds)
+    }
+
+    mediaButtonHandler.addHoldAction(0) {
+      log("0 clicks + hold executed");
+      playerNotificationService.jumpBackward()
+    }
+    mediaButtonHandler.addHoldAction(1) {
+      log("1 clicks + hold executed");
+      playerNotificationService.fastForward()
+    }
+    mediaButtonHandler.addHoldAction(2) {
+      log("2 clicks + hold executed");
+      playerNotificationService.rewind()
+    }
+
+  }
 
   override fun onPrepare() {
     Log.d(tag, "ON PREPARE MEDIA SESSION COMPAT")
@@ -147,6 +191,7 @@ class MediaSessionCallback(var playerNotificationService:PlayerNotificationServi
   }
 
   private fun handleCallMediaButton(intent: Intent): Boolean {
+
     Log.w(tag, "handleCallMediaButton $intent | ${intent.action}")
 
     if(Intent.ACTION_MEDIA_BUTTON == intent.action) {
@@ -155,6 +200,13 @@ class MediaSessionCallback(var playerNotificationService:PlayerNotificationServi
       } else {
         @Suppress("DEPRECATION")
         intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT)
+      }
+
+      if(deviceSettings.enableExtendedHeadsetControls) {
+        Log.d(tag, "extended headset control: enabled")
+        return mediaButtonHandler.handleKeyEvent(keyEvent);
+      } else {
+        Log.d(tag, "extended headset control: disabled")
       }
 
       Log.d(tag, "handleCallMediaButton keyEvent = $keyEvent | action ${keyEvent?.action}")
@@ -243,6 +295,10 @@ class MediaSessionCallback(var playerNotificationService:PlayerNotificationServi
         }
       }
     }
+    return true
+  }
+
+  private fun handleExtendedHeadsetControl(keyEvent: KeyEvent?): Boolean {
     return true
   }
 
