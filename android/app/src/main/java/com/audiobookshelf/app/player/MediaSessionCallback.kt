@@ -2,6 +2,7 @@ package com.audiobookshelf.app.player
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.media.AudioManager
 import android.os.*
 import android.support.v4.media.session.MediaSessionCompat
 import android.util.Log
@@ -10,18 +11,34 @@ import com.audiobookshelf.app.data.DeviceSettings
 import com.audiobookshelf.app.data.LibraryItemWrapper
 import com.audiobookshelf.app.data.PodcastEpisode
 import com.audiobookshelf.app.device.DeviceManager
+import com.audiobookshelf.app.player.mediaButtonHandler.KeyDownHandler
 import com.audiobookshelf.app.player.mediaButtonHandler.KeyDownKeyUpHandler
+import com.audiobookshelf.app.player.mediaButtonHandler.KeyDownRepeatCountHandler
 import com.audiobookshelf.app.player.mediaButtonHandler.MediaButtonHandler
 import java.util.*
 import kotlin.concurrent.schedule
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 class MediaSessionCallback(var playerNotificationService:PlayerNotificationService) : MediaSessionCompat.Callback() {
   var tag = "MediaSessionCallback"
 
   private val deviceSettings
     get() = DeviceManager.deviceData.deviceSettings ?: DeviceSettings.default()
-  private val mediaButtonHandler: MediaButtonHandler = KeyDownKeyUpHandler(playerNotificationService.serviceScope)
+  // private val mediaButtonHandler: MediaButtonHandler = KeyDownKeyUpHandler(playerNotificationService.serviceScope,
+    private val mediaButtonHandler: MediaButtonHandler = KeyDownHandler(
+    playerNotificationService.serviceScope,
+    { it ->
+      if (it == true) {
+        playerNotificationService.play()
+      } else if (it == false) {
+        playerNotificationService.pause()
+      }
+      playerNotificationService.isPlaying()
+    },
+    { playerNotificationService.closePlayback() },
+  )
 
   private var mediaButtonClickCount: Int = 0
   private var mediaButtonClickTimeout: Long = 1000  //ms
@@ -32,6 +49,12 @@ class MediaSessionCallback(var playerNotificationService:PlayerNotificationServi
 
 
   init {
+    // with tiramisu (Android 13) long-press events are delayed 1000ms
+    // which results in a minimum execution delay of 1050ms
+    // before that the delay can be 650ms to be more reactive
+    if(Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+      mediaButtonHandler.handlerDelay = 650.milliseconds
+    }
 
     mediaButtonHandler.addClickAction(1) {
       log("1 click executed");
@@ -52,14 +75,19 @@ class MediaSessionCallback(var playerNotificationService:PlayerNotificationServi
     }
     mediaButtonHandler.addHoldAction(1) {
       log("1 clicks + hold executed");
-      playerNotificationService.fastForward()
+      // playerNotificationService.fastForward()
+
+      playerNotificationService.seekForward(10.seconds.inWholeMilliseconds)
     }
     mediaButtonHandler.addHoldAction(2) {
       log("2 clicks + hold executed");
-      playerNotificationService.rewind()
+      // playerNotificationService.rewind()
+      playerNotificationService.seekBackward(10.seconds.inWholeMilliseconds)
     }
-
+    //
   }
+
+
 
   override fun onPrepare() {
     Log.d(tag, "ON PREPARE MEDIA SESSION COMPAT")
@@ -295,10 +323,6 @@ class MediaSessionCallback(var playerNotificationService:PlayerNotificationServi
         }
       }
     }
-    return true
-  }
-
-  private fun handleExtendedHeadsetControl(keyEvent: KeyEvent?): Boolean {
     return true
   }
 

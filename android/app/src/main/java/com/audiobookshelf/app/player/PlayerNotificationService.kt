@@ -134,6 +134,10 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
   private var forceReloadingAndroidAuto: Boolean = false
   private var firstLoadDone: Boolean = false
 
+  fun isPlaying(): Boolean {
+    return currentPlayer?.isPlaying ?: false
+  }
+
   fun isBrowseTreeInitialized(): Boolean {
     return this::browseTree.isInitialized
   }
