@@ -15,7 +15,7 @@ class KeyDownHandler(
   holdActions: MutableList<MediaButtonHandlerClickAction> = mutableListOf()
 ) : AbstractMediaButtonHandler(scope, playingStatusCallback, stopCallback, clickActions, holdActions) {
 
-  val holdEndedDelay = 200.milliseconds
+  val holdEndedDelay = 150.milliseconds
   val holdActionDelay = 850.milliseconds
   var buttonHoldEndedJob: Job? = null
   var repetitiveHoldJob: Job? = null
@@ -26,16 +26,18 @@ class KeyDownHandler(
   override fun handleKeyEvent(keyEvent: KeyEvent?): Boolean {
     // ignore all events that are not KEY_DOWN
     if(keyEvent?.action != KeyEvent.ACTION_DOWN) {
+      log("handleKeyEvent: IGNORE ${keyEventToString(keyEvent)}, clickCount=$clickCount")
+
       // mark event as handled
       return true;
     }
 
-    log("handleKeyEvent: ${keyEventToString(keyEvent)}, clickCount=$clickCount, repeatCount=${keyEvent.repeatCount}")
+    log("handleKeyEvent: ${keyEventToString(keyEvent)}, clickCount=$clickCount")
 
     // timerdelay has +100ms to regard the time of a release before a hold
     // sequence KEY_DOWN starts with handlerDelay, releasing takes 250ms and holding down takes 1000ms
     // so DOWN + UP + DOWN_AND_HOLD sequence may need 1250ms or even more
-    val timerDelay = handlerDelay + 100.milliseconds
+    val timerDelay = if(holdActions.isEmpty()) handlerDelayWithoutHoldSupport else handlerDelay + holdEndedDelay
     val isRepeatedEvent = keyEvent.repeatCount > 0
     val isFirstRepeatedEvent = isRepeatedEvent && firstRepeatCount == 0
     // only increase the clickCount on non-clickPressed events
@@ -60,6 +62,10 @@ class KeyDownHandler(
         log("buttonHoldEndedJob: scheduled")
         delay(holdEndedDelay)
         log("buttonHoldEndedJob: execute")
+
+        // cancel repetiveHoldJob to prevent it from executing after
+        repetitiveHoldJob?.cancel()
+        buttonReleasedJob?.cancel()
         clickCount = 0
         log("buttonHoldEndedJob: wasPlaying=$wasPlaying")
         playingStatusCallback(wasPlaying)
@@ -97,6 +103,8 @@ class KeyDownHandler(
       }"
       )
       delay(timerDelay)
+      buttonHoldEndedJob?.cancel()
+      repetitiveHoldJob?.cancel()
       log("clickReleasedJob executed: delay=${timerDelay.inWholeMilliseconds}ms, clicks=$clickCount, hold=$isRepeatedEvent ==== ${
         keyEventToString(keyEvent)
       }")

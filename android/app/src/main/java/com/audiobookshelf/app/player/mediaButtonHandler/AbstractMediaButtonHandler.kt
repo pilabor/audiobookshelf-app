@@ -15,8 +15,11 @@ abstract class AbstractMediaButtonHandler(
   ): MediaButtonHandler {
 
   override var handlerDelay = 1050.milliseconds
+  val handlerDelayWithoutHoldSupport = 650.milliseconds
   var clickCount = 0
   var buttonReleasedJob: Job? = null
+
+  private var lastAction: MediaButtonHandlerClickAction? = null
 
 
   fun log(message: String) {
@@ -42,7 +45,7 @@ abstract class AbstractMediaButtonHandler(
       KeyEvent.KEYCODE_MEDIA_STOP -> "KEYCODE_MEDIA_STOP"
       else -> "KEYCODE_UNKNOWN"
     }
-    return "keyCode=$keyCode, action=$action, repeatCount=${keyEvent.repeatCount}"
+    return "keyCode=$keyCode, action=$action, repeatCount=${keyEvent.repeatCount}, eventTime=${keyEvent.eventTime}, downTime=${keyEvent.downTime}"
   }
 
   override fun addClickAction(clicks: Int, callback: () -> Unit) {
@@ -58,7 +61,10 @@ abstract class AbstractMediaButtonHandler(
     if(action == null) {
       log("executeHoldAction: no action found")
     }
-    action?.callback?.invoke()
+    // progressive actions (like fastForward and rewind) only get called once
+    if(action?.progressive == false || action != lastAction) {
+      action?.callback?.invoke()
+    }
   }
 
   fun executeClickAction(clickCount: Int) {
@@ -70,8 +76,6 @@ abstract class AbstractMediaButtonHandler(
     }
     action?.callback?.invoke()
   }
-
-
 
   fun updateClickCount(keyEvent: KeyEvent): KeyCodeResult {
     when (keyEvent.keyCode) {

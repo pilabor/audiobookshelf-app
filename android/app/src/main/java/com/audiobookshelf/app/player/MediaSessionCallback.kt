@@ -68,23 +68,30 @@ class MediaSessionCallback(var playerNotificationService:PlayerNotificationServi
       log("3 clicks executed");
       playerNotificationService.seekBackward(5.minutes.inWholeMilliseconds)
     }
-
+    mediaButtonHandler.addClickAction(4) {
+      log("4 clicks executed");
+      playerNotificationService.rewind()
+    }
+    mediaButtonHandler.addClickAction(5) {
+      log("5 clicks executed");
+      playerNotificationService.fastForward()
+    }
+    /*
     mediaButtonHandler.addHoldAction(0) {
       log("0 clicks + hold executed");
       playerNotificationService.jumpBackward()
     }
     mediaButtonHandler.addHoldAction(1) {
       log("1 clicks + hold executed");
-      // playerNotificationService.fastForward()
-
-      playerNotificationService.seekForward(10.seconds.inWholeMilliseconds)
+      playerNotificationService.seekForward(15.seconds.inWholeMilliseconds)
     }
     mediaButtonHandler.addHoldAction(2) {
       log("2 clicks + hold executed");
       // playerNotificationService.rewind()
-      playerNotificationService.seekBackward(10.seconds.inWholeMilliseconds)
+      playerNotificationService.seekBackward(15.seconds.inWholeMilliseconds)
     }
-    //
+     */
+
   }
 
 
@@ -223,6 +230,8 @@ class MediaSessionCallback(var playerNotificationService:PlayerNotificationServi
     Log.w(tag, "handleCallMediaButton $intent | ${intent.action}")
 
     if(Intent.ACTION_MEDIA_BUTTON == intent.action) {
+      Log.d(tag, "action mediabutton")
+
       val keyEvent = if (Build.VERSION.SDK_INT >= 33) {
         intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT, KeyEvent::class.java)
       } else {
