@@ -1,0 +1,390 @@
+    @RequiresApi(21)
+    static class MediaControllerImplApi21 implements MediaControllerImpl {
+        protected final MediaController mControllerFwk;
+
+        final Object mLock = new Object();
+
+        @GuardedBy("mLock")
+        private final List<Callback> mPendingCallbacks = new ArrayList<>();
+
+        private HashMap<Callback, ExtraCallback> mCallbackMap = new HashMap<>();
+
+        protected Bundle mSessionInfo;
+
+        final MediaSessionCompat.Token mSessionToken;
+
+        MediaControllerImplApi21(Context context, MediaSessionCompat.Token sessionToken) {
+            mSessionToken = sessionToken;
+            mControllerFwk = new MediaController(context,
+                    (MediaSession.Token) mSessionToken.getToken());
+            if (mSessionToken.getExtraBinder() == null) {
+                requestExtraBinder();
+            }
+        }
+
+        @Override
+        public final void registerCallback(Callback callback, Handler handler) {
+            mControllerFwk.registerCallback(callback.mCallbackFwk, handler);
+            synchronized (mLock) {
+                if (mSessionToken.getExtraBinder() != null) {
+                    ExtraCallback extraCallback = new ExtraCallback(callback);
+                    mCallbackMap.put(callback, extraCallback);
+                    callback.mIControllerCallback = extraCallback;
+                    try {
+                        mSessionToken.getExtraBinder().registerCallbackListener(extraCallback);
+                        callback.postToHandler(
+                                Callback.MessageHandler.MSG_SESSION_READY, null, null);
+                    } catch (RemoteException e) {
+                        Log.e(TAG, "Dead object in registerCallback.", e);
+                    }
+                } else {
+                    callback.mIControllerCallback = null;
+                    mPendingCallbacks.add(callback);
+                }
+            }
+        }
+
+        @Override
+        public final void unregisterCallback(Callback callback) {
+            mControllerFwk.unregisterCallback(callback.mCallbackFwk);
+            synchronized (mLock) {
+                if (mSessionToken.getExtraBinder() != null) {
+                    try {
+                        ExtraCallback extraCallback = mCallbackMap.remove(callback);
+                        if (extraCallback != null) {
+                            callback.mIControllerCallback = null;
+                            mSessionToken.getExtraBinder().unregisterCallbackListener(
+                                    extraCallback);
+                        }
+                    } catch (RemoteException e) {
+                        Log.e(TAG, "Dead object in unregisterCallback.", e);
+                    }
+                } else {
+                    mPendingCallbacks.remove(callback);
+                }
+            }
+        }
+
+        @Override
+        public boolean dispatchMediaButtonEvent(KeyEvent event) {
+            return mControllerFwk.dispatchMediaButtonEvent(event);
+        }
+
+        @Override
+        public TransportControls getTransportControls() {
+            MediaController.TransportControls controlsFwk = mControllerFwk.getTransportControls();
+            if (Build.VERSION.SDK_INT >= 29) {
+                return new TransportControlsApi29(controlsFwk);
+            } else if (Build.VERSION.SDK_INT >= 24) {
+                return new TransportControlsApi24(controlsFwk);
+            } else if (Build.VERSION.SDK_INT >= 23) {
+                return new TransportControlsApi23(controlsFwk);
+            } else {
+                return new TransportControlsApi21(controlsFwk);
+            }
+        }
+
+        @Override
+        public PlaybackStateCompat getPlaybackState() {
+            if (mSessionToken.getExtraBinder() != null) {
+                try {
+                    return mSessionToken.getExtraBinder().getPlaybackState();
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Dead object in getPlaybackState.", e);
+                }
+            }
+            PlaybackState stateFwk = mControllerFwk.getPlaybackState();
+            return stateFwk != null ? PlaybackStateCompat.fromPlaybackState(stateFwk) : null;
+        }
+
+        @Override
+        public MediaMetadataCompat getMetadata() {
+            MediaMetadata metadataFwk = mControllerFwk.getMetadata();
+            return metadataFwk != null ? MediaMetadataCompat.fromMediaMetadata(metadataFwk) : null;
+        }
+
+        @Override
+        public List<QueueItem> getQueue() {
+            List<MediaSession.QueueItem> queueFwks = mControllerFwk.getQueue();
+            return queueFwks != null ? QueueItem.fromQueueItemList(queueFwks) : null;
+        }
+
+        @Override
+        public void addQueueItem(MediaDescriptionCompat description) {
+            long flags = getFlags();
+            if ((flags & MediaSessionCompat.FLAG_HANDLES_QUEUE_COMMANDS) == 0) {
+                throw new UnsupportedOperationException(
+                        "This session doesn't support queue management operations");
+            }
+            Bundle params = new Bundle();
+            params.putParcelable(COMMAND_ARGUMENT_MEDIA_DESCRIPTION, description);
+            sendCommand(COMMAND_ADD_QUEUE_ITEM, params, null);
+        }
+
+        @Override
+        public void addQueueItem(MediaDescriptionCompat description, int index) {
+            long flags = getFlags();
+            if ((flags & MediaSessionCompat.FLAG_HANDLES_QUEUE_COMMANDS) == 0) {
+                throw new UnsupportedOperationException(
+                        "This session doesn't support queue management operations");
+            }
+            Bundle params = new Bundle();
+            params.putParcelable(COMMAND_ARGUMENT_MEDIA_DESCRIPTION, description);
+            params.putInt(COMMAND_ARGUMENT_INDEX, index);
+            sendCommand(COMMAND_ADD_QUEUE_ITEM_AT, params, null);
+        }
+
+        @Override
+        public void removeQueueItem(MediaDescriptionCompat description) {
+            long flags = getFlags();
+            if ((flags & MediaSessionCompat.FLAG_HANDLES_QUEUE_COMMANDS) == 0) {
+                throw new UnsupportedOperationException(
+                        "This session doesn't support queue management operations");
+            }
+            Bundle params = new Bundle();
+            params.putParcelable(COMMAND_ARGUMENT_MEDIA_DESCRIPTION, description);
+            sendCommand(COMMAND_REMOVE_QUEUE_ITEM, params, null);
+        }
+
+        @Override
+        public CharSequence getQueueTitle() {
+            return mControllerFwk.getQueueTitle();
+        }
+
+        @Override
+        public Bundle getExtras() {
+            return mControllerFwk.getExtras();
+        }
+
+        @Override
+        public int getRatingType() {
+            if (android.os.Build.VERSION.SDK_INT < 22 && mSessionToken.getExtraBinder() != null) {
+                try {
+                    return mSessionToken.getExtraBinder().getRatingType();
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Dead object in getRatingType.", e);
+                }
+            }
+            return mControllerFwk.getRatingType();
+        }
+
+        @Override
+        public boolean isCaptioningEnabled() {
+            if (mSessionToken.getExtraBinder() != null) {
+                try {
+                    return mSessionToken.getExtraBinder().isCaptioningEnabled();
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Dead object in isCaptioningEnabled.", e);
+                }
+            }
+            return false;
+        }
+
+        @Override
+        public int getRepeatMode() {
+            if (mSessionToken.getExtraBinder() != null) {
+                try {
+                    return mSessionToken.getExtraBinder().getRepeatMode();
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Dead object in getRepeatMode.", e);
+                }
+            }
+            return PlaybackStateCompat.REPEAT_MODE_INVALID;
+        }
+
+        @Override
+        public int getShuffleMode() {
+            if (mSessionToken.getExtraBinder() != null) {
+                try {
+                    return mSessionToken.getExtraBinder().getShuffleMode();
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Dead object in getShuffleMode.", e);
+                }
+            }
+            return PlaybackStateCompat.SHUFFLE_MODE_INVALID;
+        }
+
+        @Override
+        public long getFlags() {
+            return mControllerFwk.getFlags();
+        }
+
+        @Override
+        public PlaybackInfo getPlaybackInfo() {
+            MediaController.PlaybackInfo volumeInfoFwk = mControllerFwk.getPlaybackInfo();
+            return volumeInfoFwk != null ? new PlaybackInfo(
+                    volumeInfoFwk.getPlaybackType(),
+                    AudioAttributesCompat.wrap(volumeInfoFwk.getAudioAttributes()),
+                    volumeInfoFwk.getVolumeControl(),
+                    volumeInfoFwk.getMaxVolume(),
+                    volumeInfoFwk.getCurrentVolume()) : null;
+        }
+
+        @Override
+        public PendingIntent getSessionActivity() {
+            return mControllerFwk.getSessionActivity();
+        }
+
+        @Override
+        public void setVolumeTo(int value, int flags) {
+            mControllerFwk.setVolumeTo(value, flags);
+        }
+
+        @Override
+        public void adjustVolume(int direction, int flags) {
+            mControllerFwk.adjustVolume(direction, flags);
+        }
+
+        @Override
+        public void sendCommand(String command, Bundle params, ResultReceiver cb) {
+            mControllerFwk.sendCommand(command, params, cb);
+        }
+
+        @Override
+        public boolean isSessionReady() {
+            return mSessionToken.getExtraBinder() != null;
+        }
+
+        @Override
+        public String getPackageName() {
+            return mControllerFwk.getPackageName();
+        }
+
+        @Override
+        public Bundle getSessionInfo() {
+            if (mSessionInfo != null) {
+                return new Bundle(mSessionInfo);
+            }
+
+            if (mSessionToken.getExtraBinder() != null) {
+                try {
+                    mSessionInfo = mSessionToken.getExtraBinder().getSessionInfo();
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Dead object in getSessionInfo.", e);
+                    mSessionInfo = Bundle.EMPTY;
+                }
+            }
+
+            mSessionInfo = MediaSessionCompat.unparcelWithClassLoader(mSessionInfo);
+            return mSessionInfo == null ? Bundle.EMPTY : new Bundle(mSessionInfo);
+        }
+
+        @Override
+        public Object getMediaController() {
+            return mControllerFwk;
+        }
+
+        private void requestExtraBinder() {
+            sendCommand(COMMAND_GET_EXTRA_BINDER, null, new ExtraBinderRequestResultReceiver(this));
+        }
+
+        @GuardedBy("mLock")
+        void processPendingCallbacksLocked() {
+            if (mSessionToken.getExtraBinder() == null) {
+                return;
+            }
+            for (Callback callback : mPendingCallbacks) {
+                ExtraCallback extraCallback = new ExtraCallback(callback);
+                mCallbackMap.put(callback, extraCallback);
+                callback.mIControllerCallback = extraCallback;
+                try {
+                    mSessionToken.getExtraBinder().registerCallbackListener(extraCallback);
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Dead object in registerCallback.", e);
+                    break;
+                }
+                callback.postToHandler(Callback.MessageHandler.MSG_SESSION_READY, null, null);
+            }
+            mPendingCallbacks.clear();
+        }
+
+        static void setMediaController(@NonNull Activity activity,
+                @Nullable MediaControllerCompat mediaControllerCompat) {
+            MediaController controllerFwk = null;
+            if (mediaControllerCompat != null) {
+                Object sessionTokenObj = mediaControllerCompat.getSessionToken().getToken();
+                controllerFwk = new MediaController(activity, (MediaSession.Token) sessionTokenObj);
+            }
+            activity.setMediaController(controllerFwk);
+        }
+
+        @Nullable
+        static MediaControllerCompat getMediaController(@NonNull Activity activity) {
+            MediaController controllerFwk = activity.getMediaController();
+            if (controllerFwk == null) {
+                return null;
+            }
+            MediaSession.Token sessionTokenFwk = controllerFwk.getSessionToken();
+            return new MediaControllerCompat(activity,
+                    MediaSessionCompat.Token.fromToken(sessionTokenFwk));
+        }
+
+        private static class ExtraBinderRequestResultReceiver extends ResultReceiver {
+            private WeakReference<MediaControllerImplApi21> mMediaControllerImpl;
+
+            ExtraBinderRequestResultReceiver(MediaControllerImplApi21 mediaControllerImpl) {
+                super(null /* handler */);
+                mMediaControllerImpl = new WeakReference<>(mediaControllerImpl);
+            }
+
+            @Override
+            protected void onReceiveResult(int resultCode, Bundle resultData) {
+                MediaControllerImplApi21 mediaControllerImpl = mMediaControllerImpl.get();
+                if (mediaControllerImpl == null || resultData == null) {
+                    return;
+                }
+                synchronized (mediaControllerImpl.mLock) {
+                    mediaControllerImpl.mSessionToken.setExtraBinder(
+                            IMediaSession.Stub.asInterface(
+                                    BundleCompat.getBinder(
+                                            resultData, MediaSessionCompat.KEY_EXTRA_BINDER)));
+                    mediaControllerImpl.mSessionToken.setSession2Token(
+                            ParcelUtils.getVersionedParcelable(resultData,
+                                    MediaSessionCompat.KEY_SESSION2_TOKEN));
+                    mediaControllerImpl.processPendingCallbacksLocked();
+                }
+            }
+        }
+
+        private static class ExtraCallback extends Callback.StubCompat {
+            ExtraCallback(Callback callback) {
+                super(callback);
+            }
+
+            @Override
+            public void onSessionDestroyed() throws RemoteException {
+                // Will not be called.
+                throw new AssertionError();
+            }
+
+            @Override
+            public void onMetadataChanged(MediaMetadataCompat metadata) throws RemoteException {
+                // Will not be called.
+                throw new AssertionError();
+            }
+
+            @Override
+            public void onQueueChanged(List<QueueItem> queue) throws RemoteException {
+                // Will not be called.
+                throw new AssertionError();
+            }
+
+            @Override
+            public void onQueueTitleChanged(CharSequence title) throws RemoteException {
+                // Will not be called.
+                throw new AssertionError();
+            }
+
+            @Override
+            public void onExtrasChanged(Bundle extras) throws RemoteException {
+                // Will not be called.
+                throw new AssertionError();
+            }
+
+            @Override
+            public void onVolumeInfoChanged(ParcelableVolumeInfo info) throws RemoteException {
+                // Will not be called.
+                throw new AssertionError();
+            }
+        }
+    }

@@ -27,8 +27,6 @@ class KeyDownHandler(
     // ignore all events that are not KEY_DOWN
     if(keyEvent?.action != KeyEvent.ACTION_DOWN) {
       log("handleKeyEvent: IGNORE ${keyEventToString(keyEvent)}, clickCount=$clickCount")
-
-      // mark event as handled
       return true;
     }
 

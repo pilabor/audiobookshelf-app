@@ -59,6 +59,11 @@ import kotlinx.coroutines.launch
 import java.util.*
 import kotlin.concurrent.schedule
 import kotlinx.coroutines.runBlocking
+import okhttp3.internal.immutableListOf
+import kotlin.compareTo
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -1002,6 +1007,89 @@ class PlayerNotificationService : MediaBrowserServiceCompat() {
   fun skipToPrevious() {
     cancelSeekJob()
     currentPlayer.seekToPrevious()
+  }
+
+
+  /*
+  val THRESHOLD_FOR_BACK_SEEK_MS = 2500;
+
+  fun forceSeekToPrevious(maxOffset: Duration = 0.milliseconds) {
+    cancelSeekJob()
+    serviceScope.launch {
+      val currentMediaItem = currentPlayer.currentMediaItem ?: return@launch
+      val marks = currentPlaybackSession?.chapters ?: immutableListOf<BookChapter>()// currentMediaItem.chapter()?.chapterMarks ?: return@launch
+      val currentPosition = currentPlayer.currentPosition
+      val currentMark = marks.firstOrNull { mark ->
+        currentPosition in mark.startMs..mark.endMs
+      } ?: marks.last()
+
+      if (currentPosition - currentMark.startMs > THRESHOLD_FOR_BACK_SEEK_MS) {
+        val seekToPosition = if(maxOffset <= 0.milliseconds) currentMark.startMs else max(currentMark.startMs, currentPosition - maxOffset.inWholeMilliseconds)
+        // Logger.d("theseeker-prev: seekToPosition=$seekToPosition / currentMark.startMs=$currentMark.startMs")
+        currentPlayer.seekTo(seekToPosition)
+      } else {
+        val currentMarkIndex = marks.indexOf(currentMark)
+        val previousMark = marks.getOrNull(currentMarkIndex - 1)
+        if (previousMark != null) {
+          val seekToPosition = if(maxOffset <= 0.milliseconds) previousMark.startMs else max(previousMark.startMs, currentPosition - maxOffset.inWholeMilliseconds)
+          // Logger.d("theseeker-prev: seekToPosition=$seekToPosition / previousMark.startMs=$previousMark.startMs")
+          currentPlayer.seekTo(seekToPosition)
+        } else {
+          // Logger.d("theseeker-prev: else")
+
+          val currentMediaItemIndex = currentPlayer.currentMediaItemIndex
+          if (currentMediaItemIndex > 0) {
+            val previousMediaItemIndex = currentPlayer.previousMediaItemIndex
+            val previousMediaItem = currentPlayer.getMediaItemAt(previousMediaItemIndex)
+
+            currentPlayer.pause()
+            currentPlayer.seekToPreviousMediaItem()
+
+            // currentPlayer.curr
+
+            /*
+            val previousMediaItemMarks = previousMediaItem.chapter()?.chapterMarks
+              ?: return@launch
+
+            val lastPreviousMediaItemMark = previousMediaItemMarks.last()
+            val played = currentPosition - lastPreviousMediaItemMark.endMs
+            val maxOffsetRemaining = maxOffset - played.milliseconds
+            val normalizedOffset = lastPreviousMediaItemMark.endMs - maxOffsetRemaining.inWholeMilliseconds
+            Logger.d("theseeker-prev: played=$played, maxOffsetRemaining=$maxOffsetRemaining, rest: $normalizedOffset")
+            val seekToPosition = if(maxOffset <= 0.milliseconds) lastPreviousMediaItemMark.startMs else max(lastPreviousMediaItemMark.startMs, normalizedOffset)
+            */
+
+            currentPlayer.seekTo(previousMediaItemIndex, seekToPosition)
+          } else {
+            currentPlayer.seekTo(0)
+          }
+        }
+      }
+    }
+  }
+
+   */
+
+
+  fun skipToNextMark(maxOffset: Duration=0.milliseconds) {
+    cancelSeekJob()
+    serviceScope.launch {
+      val currentPosition = currentPlayer.currentPosition
+      val marks = currentPlaybackSession?.chapters ?: immutableListOf<BookChapter>()
+      val currentMediaItem = currentPlayer.currentMediaItem ?: return@launch
+      // val marks = currentMediaItem.chapter()?.chapterMarks ?: return@launch
+      val currentMarkIndex = marks.indexOfFirst { mark ->
+        currentPlayer.currentPosition in mark.startMs..mark.endMs
+      }
+      val nextMark = marks.getOrNull(currentMarkIndex + 1)
+      if (nextMark != null) {
+        val seekToPosition = if(maxOffset == 0.milliseconds) nextMark.startMs else min(nextMark.startMs, currentPosition + maxOffset.inWholeMilliseconds)
+        // Logger.d("theseeker: seekToPosition=$seekToPosition / nextMark.startMs=$nextMark.startMs")
+        currentPlayer.seekTo(seekToPosition)
+      } else {
+        currentPlayer.seekToNext()
+      }
+    }
   }
 
   fun skipToNext() {

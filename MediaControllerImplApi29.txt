@@ -1,0 +1,16 @@
+    @RequiresApi(29)
+    static class MediaControllerImplApi29 extends MediaControllerImplApi21 {
+        MediaControllerImplApi29(Context context, MediaSessionCompat.Token sessionToken) {
+            super(context, sessionToken);
+        }
+
+        @Override
+        public Bundle getSessionInfo() {
+            if (mSessionInfo != null) {
+                return new Bundle(mSessionInfo);
+            }
+            mSessionInfo = mControllerFwk.getSessionInfo();
+            mSessionInfo = MediaSessionCompat.unparcelWithClassLoader(mSessionInfo);
+            return mSessionInfo == null ? Bundle.EMPTY : new Bundle(mSessionInfo);
+        }
+    }

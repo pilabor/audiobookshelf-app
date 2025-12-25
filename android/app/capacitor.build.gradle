@@ -9,6 +9,10 @@ android {
 
 apply from: "../capacitor-cordova-android-plugins/cordova.variables.gradle"
 dependencies {
+    implementation 'com.google.firebase:firebase-crashlytics-buildtools:3.0.4'
+  implementation 'androidx.media3:media3-datasource:1.7.1'
+  implementation 'androidx.media3:media3-session:1.7.1'
+  implementation 'androidx.media3:media3-common:1.7.1'
     implementation project(':webnativellc-capacitor-filesharer')
     implementation project(':capacitor-community-keep-awake')
     implementation project(':capacitor-community-volume-buttons')

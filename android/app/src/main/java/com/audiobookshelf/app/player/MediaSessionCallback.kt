@@ -62,8 +62,9 @@ class MediaSessionCallback(var playerNotificationService:PlayerNotificationServi
     }
     mediaButtonHandler.addClickAction(2) {
       log("2 clicks executed");
+
       playerNotificationService.seekForward(5.minutes.inWholeMilliseconds)
-    };
+    }
     mediaButtonHandler.addClickAction(3) {
       log("3 clicks executed");
       playerNotificationService.seekBackward(5.minutes.inWholeMilliseconds)
@@ -93,8 +94,6 @@ class MediaSessionCallback(var playerNotificationService:PlayerNotificationServi
      */
 
   }
-
-
 
   override fun onPrepare() {
     Log.d(tag, "ON PREPARE MEDIA SESSION COMPAT")
@@ -225,19 +224,45 @@ class MediaSessionCallback(var playerNotificationService:PlayerNotificationServi
     return handleCallMediaButton(mediaButtonEvent)
   }
 
+
+  private fun keyEventToString(keyEvent: KeyEvent?): String {
+    if(keyEvent == null) {
+      return "keyEvent is <null>"
+    }
+    val action = when (keyEvent.action) {
+      KeyEvent.ACTION_UP -> "ACTION_UP"
+      KeyEvent.ACTION_DOWN -> "ACTION_DOWN"
+      else -> "ACTION_UNKNOWN"
+    }
+    val keyCode = when (keyEvent.keyCode) {
+      KeyEvent.KEYCODE_HEADSETHOOK -> "KEYCODE_HEADSETHOOK"
+      KeyEvent.KEYCODE_MEDIA_PLAY -> "KEYCODE_MEDIA_PLAY"
+      KeyEvent.KEYCODE_MEDIA_PAUSE -> "KEYCODE_MEDIA_PAUSE"
+      KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "KEYCODE_MEDIA_PLAY_PAUSE"
+      KeyEvent.KEYCODE_MEDIA_NEXT -> "KEYCODE_MEDIA_NEXT"
+      KeyEvent.KEYCODE_MEDIA_PREVIOUS -> "KEYCODE_MEDIA_PREVIOUS"
+      KeyEvent.KEYCODE_MEDIA_STOP -> "KEYCODE_MEDIA_STOP"
+      else -> "KEYCODE_UNKNOWN"
+    }
+    return "keyEvent is keyCode=$keyCode, action=$action, repeatCount=${keyEvent.repeatCount}, eventTime=${keyEvent.eventTime}, downTime=${keyEvent.downTime}"
+  }
+
   private fun handleCallMediaButton(intent: Intent): Boolean {
 
     Log.w(tag, "handleCallMediaButton $intent | ${intent.action}")
 
-    if(Intent.ACTION_MEDIA_BUTTON == intent.action) {
-      Log.d(tag, "action mediabutton")
+    val keyEvent = if (Build.VERSION.SDK_INT >= 33) {
+      intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT, KeyEvent::class.java)
+    } else {
+      @Suppress("DEPRECATION")
+      intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT)
+    }
+    Log.d(tag, "custom-onMediaButtonEvent:" + keyEventToString(keyEvent))
+    return true
 
-      val keyEvent = if (Build.VERSION.SDK_INT >= 33) {
-        intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT, KeyEvent::class.java)
-      } else {
-        @Suppress("DEPRECATION")
-        intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT)
-      }
+    if(Intent.ACTION_MEDIA_BUTTON == intent.action) {
+      // Log.d(tag, "action mediabutton")
+
 
       if(deviceSettings.enableExtendedHeadsetControls) {
         Log.d(tag, "extended headset control: enabled")

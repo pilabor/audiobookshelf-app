@@ -1,3 +1,43 @@
+```
+// for black screen mediabuttons, you need a mediabutton intent receiver
+// https://stackoverflow.com/questions/27630852/accessibilityservice-onkeyevent-with-screen-off
+
+
+
+class MyMediaSessionCallback : MediaSession.Callback() {
+
+    private var pressStartTime: Long = 0
+    private val LONG_PRESS_THRESHOLD_MS = 500L  // z.B. 500 ms statt 1000 ms
+
+    override fun onMediaButtonEvent(mediaButtonIntent: Intent?): Boolean {
+        val event = mediaButtonIntent?.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
+        if (event != null && event.keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> {
+                    pressStartTime = System.currentTimeMillis()
+                    return true
+                }
+                KeyEvent.ACTION_UP -> {
+                    val pressDuration = System.currentTimeMillis() - pressStartTime
+                    if (pressDuration >= LONG_PRESS_THRESHOLD_MS) {
+                        // Long Press erkannt
+                        Log.d("MediaButton", "Langer Druck erkannt")
+                        // Tu etwas für langen Druck
+                    } else {
+                        // Kurzer Druck
+                        Log.d("MediaButton", "Kurzer Druck erkannt")
+                        // Tu etwas für kurzen Druck
+                    }
+                    return true
+                }
+            }
+        }
+        return super.onMediaButtonEvent(mediaButtonIntent)
+    }
+}
+```
+
+
 # Audiobookshelf Mobile App
 
 Audiobookshelf is a self-hosted audiobook and podcast server.
